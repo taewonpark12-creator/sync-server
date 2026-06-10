@@ -1,104 +1,103 @@
 const express = require("express");
 const cors = require("cors");
-const { connectDB, closeDB } = require("./db");
+const { initDB, getDB, closeDB } = require("./db");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+const PORT = 3001;
+
 /**
- * 상품 가격 조회 API
+ * 서버 시작
+ */
+async function startServer() {
+  await initDB(); // 🔥 pool 1번만 생성
+
+  app.listen(PORT, () => {
+    console.log("서버 실행됨:", PORT);
+  });
+}
+
+/**
+ * 가격 API (핵심)
  */
 app.get("/api/price", async (req, res) => {
-  const barcode = req.query.barcode;
+  const { barcode } = req.query;
 
   if (!barcode) {
-    return res.status(400).json({ error: "barcode 필요" });
+    return res.status(400).json({ error: "barcode missing" });
   }
 
   try {
-    const conn = await connectDB();
+    const db = getDB();
 
-    // Goods 테이블에서 기본 정보 조회
-    const goodsResult = await conn.query(`
-      SELECT TOP 1 
-        BarCode,
-        G_Name,
-        Sell_Pri
-      FROM Goods
-      WHERE BarCode = ?
-    `, [barcode]);
+    const sql = `
+      SELECT TOP 1
+        Sell_Pri,
+        TSell_Pri
+      FROM SaD_202606
+      WHERE Barcode = ?
+    `;
 
-    const goodsRows = Array.isArray(goodsResult) ? goodsResult : goodsResult?.rows || [];
-    const goodsRow = goodsRows[0];
+    const result = await db.query(sql, [barcode]);
 
-    if (!goodsRow) {
-      await closeDB(conn);
-      return res.status(404).json({ error: "상품 없음" });
+    if (!result || result.length === 0) {
+      return res.json({
+        normalPrice: null,
+        eventPrice: null,
+        discountRate: null
+      });
     }
 
-    // SaD_202606 테이블에서 최근 판매 기록 조회
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const currentMonthStr = `${currentYear}${currentMonth}`;
-    const tableName = `tips..SaD_${currentMonthStr}`;
+    const row = result[0];
+    const Sell_Pri = row.Sell_Pri;
+    const TSell_Pri = row.TSell_Pri;
+
+    // Sell_Pri 유효성 검사
+    if (!Sell_Pri || Sell_Pri <= 0) {
+      return res.json({
+        normalPrice: null,
+        eventPrice: null,
+        discountRate: null
+      });
+    }
 
     let eventPrice = null;
     let discountRate = null;
 
-    try {
-      const saDResult = await conn.query(`
-        SELECT TOP 1 
-          Sell_Pri
-        FROM ${tableName}
-        WHERE Barcode = ?
-        ORDER BY Sale_Date DESC, Sale_Time DESC
-      `, [barcode]);
-
-      const saDRows = Array.isArray(saDResult) ? saDResult : saDResult?.rows || [];
-      const saDRow = saDRows[0];
-
-      if (saDRow) {
-        // eventPrice 계산: salePrice < normalPrice
-        const normalPrice = goodsRow.Sell_Pri;
-        const salePrice = saDRow.Sell_Pri;
-        eventPrice = salePrice < normalPrice ? salePrice : null;
-        
-        if (eventPrice !== null) {
-          discountRate = Math.round(((normalPrice - eventPrice) / normalPrice) * 100);
-        }
-      }
-    } catch (saDError) {
-      // SaD 조회 실패 시 무시 (eventPrice는 null 유지)
-      console.error(`SaD 조회 오류 (${tableName}):`, saDError.message);
+    // 행사 가격 계산: TSell_Pri > 0 && TSell_Pri < Sell_Pri
+    if (TSell_Pri > 0 && TSell_Pri < Sell_Pri) {
+      eventPrice = TSell_Pri;
+      discountRate = Math.round((1 - TSell_Pri / Sell_Pri) * 100);
     }
 
-    res.json({
-      normalPrice: goodsRow.Sell_Pri,
+    return res.json({
+      normalPrice: Sell_Pri,
       eventPrice: eventPrice,
       discountRate: discountRate
     });
 
-    await closeDB(conn);
-
   } catch (err) {
     console.error("API ERROR:", err);
-    console.error("Error details:", {
-      message: err.message,
-      stack: err.stack,
-      barcode: barcode
+
+    // 🔥 절대 500으로 죽이지 않음 (프론트 보호)
+    return res.json({
+      normalPrice: null,
+      eventPrice: null,
+      discountRate: null,
+      error: "db_error"
     });
-    res.status(500).send(err.message);
   }
 });
 
 /**
- * 서버 실행
+ * 서버 종료 처리
  */
-const PORT = process.env.PORT || 3001;
-
-app.listen(PORT, () => {
-  console.log(`서버 실행됨: ${PORT}`);
+process.on("SIGINT", async () => {
+  await closeDB();
+  process.exit(0);
 });
+
+startServer();

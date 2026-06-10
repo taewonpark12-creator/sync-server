@@ -1,20 +1,49 @@
 const odbc = require("odbc");
 
 const connectionString =
-"Driver={SQL Server};Server=192.168.10.111,18973;Database=tips;Uid=sa;Pwd=0888TipS!@;";
+  "Driver={SQL Server};Server=192.168.10.111,18973;Database=tips;Uid=sa;Pwd=0888TipS!@;";
 
-async function connectDB() {
-  // 요청마다 새로운 connection 생성
-  const db = await odbc.connect(connectionString);
-  console.log("DB Connected");
-  return db;
+// 🔥 핵심: pool 생성
+let pool;
+
+/**
+ * DB Pool 초기화 (서버 시작 시 1번만 실행)
+ */
+async function initDB() {
+  if (!pool) {
+    pool = await odbc.pool(connectionString, {
+      min: 1,   // 최소 연결
+      max: 10   // 최대 연결 (동시 요청 처리)
+    });
+
+    console.log("DB Pool Connected");
+  }
+
+  return pool;
 }
 
-async function closeDB(db) {
-  if (db) {
-    await db.close();
-    console.log("DB Closed");
+/**
+ * DB Pool 가져오기
+ */
+function getDB() {
+  if (!pool) {
+    throw new Error("DB not initialized. Call initDB first.");
+  }
+  return pool;
+}
+
+/**
+ * 서버 종료 시 정리
+ */
+async function closeDB() {
+  if (pool) {
+    await pool.close();
+    console.log("DB Pool Closed");
   }
 }
 
-module.exports = { connectDB, closeDB };
+module.exports = {
+  initDB,
+  getDB,
+  closeDB
+};
