@@ -138,7 +138,7 @@ app.get("/api/price", async (req, res) => {
 
   try {
 const pool = await poolPromise;
-    const result = await await pool.request().query(`
+    const result = await pool.request().query(`
       `SELECT TOP 1 Barcode, goods_name, supply_price FROM Goods_Info WHERE Barcode = '${barcode}'`
     );
 
@@ -185,7 +185,7 @@ const pool = await poolPromise;
         const rowCount = countResult[0].count;
 
         if (rowCount > 0) {
-          const columnsResult = await await pool.request().query(`
+          const columnsResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '${table.TABLE_NAME}'
@@ -239,7 +239,7 @@ const pool = await poolPromise;
     const results = [];
     for (const table of top20) {
       try {
-        const sampleResult = await await pool.request().query(`SELECT TOP 3 * FROM [${table.tableName}]`);
+        const sampleResult = await pool.request().query(`SELECT TOP 3 * FROM [${table.tableName}]`);
         results.push({
           ...table,
           sampleData: sampleResult,
@@ -293,7 +293,7 @@ app.get("/api/product", async (req, res) => {
     const response = await queueDbOperation(async () => {
 const pool = await poolPromise;
       // Goods 테이블에서 기본 정보 조회 (3파트 명명)
-      const goodsResult = await await pool.request().query('
+      const goodsResult = await pool.request().query('
         `SELECT TOP 1 Barcode, G_Name, Sell_Pri FROM tips..Goods WHERE Barcode = '${trimmedBarcode}'`
       );
 
