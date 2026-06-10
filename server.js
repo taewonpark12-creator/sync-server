@@ -4,30 +4,43 @@ const { initDB, getDB, closeDB } = require("./db");
 
 const app = express();
 
-app.use(cors());
+// =======================
+// Middleware
+// =======================
+app.use(cors()); // 필요하면 origin 제한 가능
 app.use(express.json());
 
 const PORT = 3001;
 
-/**
- * 서버 시작
- */
+// =======================
+// 서버 시작 (DB pool 1회 생성)
+// =======================
 async function startServer() {
-  await initDB(); // 🔥 pool 1번만 생성
+  try {
+    await initDB();
+    console.log("DB Connected");
 
-  app.listen(PORT, () => {
-    console.log("서버 실행됨:", PORT);
-  });
+    app.listen(PORT, () => {
+      console.log("서버 실행됨:", PORT);
+    });
+  } catch (err) {
+    console.error("서버 시작 실패:", err);
+  }
 }
 
-/**
- * 가격 API (핵심)
- */
+// =======================
+// 가격 API
+// =======================
 app.get("/api/price", async (req, res) => {
   const { barcode } = req.query;
 
   if (!barcode) {
-    return res.status(400).json({ error: "barcode missing" });
+    return res.status(400).json({
+      error: "barcode missing",
+      normalPrice: null,
+      eventPrice: null,
+      discountRate: null,
+    });
   }
 
   try {
@@ -47,57 +60,71 @@ app.get("/api/price", async (req, res) => {
       return res.json({
         normalPrice: null,
         eventPrice: null,
-        discountRate: null
+        discountRate: null,
       });
     }
 
     const row = result[0];
-    const Sell_Pri = row.Sell_Pri;
-    const TSell_Pri = row.TSell_Pri;
 
-    // Sell_Pri 유효성 검사
+    // =======================
+    // 안전한 숫자 변환
+    // =======================
+    const Sell_Pri = Number(row.Sell_Pri);
+    const TSell_Pri = Number(row.TSell_Pri);
+
+    // 정상가 체크
     if (!Sell_Pri || Sell_Pri <= 0) {
       return res.json({
         normalPrice: null,
         eventPrice: null,
-        discountRate: null
+        discountRate: null,
       });
     }
 
     let eventPrice = null;
     let discountRate = null;
 
-    // 행사 가격 계산: TSell_Pri > 0 && TSell_Pri < Sell_Pri
-    if (TSell_Pri > 0 && TSell_Pri < Sell_Pri) {
+    // =======================
+    // 행사 가격 계산
+    // =======================
+    if (
+      TSell_Pri &&
+      TSell_Pri > 0 &&
+      TSell_Pri < Sell_Pri
+    ) {
       eventPrice = TSell_Pri;
       discountRate = Math.round((1 - TSell_Pri / Sell_Pri) * 100);
     }
 
     return res.json({
       normalPrice: Sell_Pri,
-      eventPrice: eventPrice,
-      discountRate: discountRate
+      eventPrice,
+      discountRate,
     });
 
   } catch (err) {
     console.error("API ERROR:", err);
 
-    // 🔥 절대 500으로 죽이지 않음 (프론트 보호)
+    // 서버 절대 죽이지 않음
     return res.json({
       normalPrice: null,
       eventPrice: null,
       discountRate: null,
-      error: "db_error"
+      error: "db_error",
     });
   }
 });
 
-/**
- * 서버 종료 처리
- */
+// =======================
+// 서버 종료 처리
+// =======================
 process.on("SIGINT", async () => {
+  console.log("서버 종료 중...");
   await closeDB();
   process.exit(0);
 });
 
+// =======================
+// 실행
+// =======================
 startServer();
