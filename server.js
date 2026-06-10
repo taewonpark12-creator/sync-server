@@ -110,8 +110,7 @@ app.get("/", (req, res) => {
 });
 
 // 현재 접속 DB 확인
-app.get("/api/debug-db", async (req, res) => {
-  try {
+app.get("/api/debug-db", async (req, res) => {  try {
 const pool = await poolPromise;
     const result = await pool.request().query(`
       SELECT
@@ -139,8 +138,10 @@ app.get("/api/price", async (req, res) => {
   try {
 const pool = await poolPromise;
     const result = await pool.request().query(`
-      `SELECT TOP 1 Barcode, goods_name, supply_price FROM Goods_Info WHERE Barcode = '${barcode}'`
-    );
+      SELECT TOP 1 Barcode, goods_name, supply_price
+      FROM Goods_Info
+      WHERE Barcode = '${barcode}'
+    `);
 
     res.json(result[0] || null);
   } catch (err) {
@@ -293,9 +294,11 @@ app.get("/api/product", async (req, res) => {
     const response = await queueDbOperation(async () => {
 const pool = await poolPromise;
       // Goods 테이블에서 기본 정보 조회 (3파트 명명)
-      const goodsResult = await pool.request().query('
-        `SELECT TOP 1 Barcode, G_Name, Sell_Pri FROM tips..Goods WHERE Barcode = '${trimmedBarcode}'`
-      );
+      const goodsResult = await pool.request().query(`
+  SELECT TOP 1 Barcode, G_Name, Sell_Pri
+  FROM tips..Goods
+  WHERE Barcode = '${trimmedBarcode}'
+`);
 
       if (!goodsResult || goodsResult.length === 0) {
         throw new Error("상품을 찾을 수 없습니다.");
