@@ -1,27 +1,20 @@
-const sql = require("mssql");
+const odbc = require("odbc");
 
-const config = {
-  user: "sa",
-  password: "0888TipS!@",
-  server: "192.168.10.111",
-  port: 18973,
-  database: "tips",
-  options: {
-    encrypt: false,
-    trustServerCertificate: true
+const connectionString =
+"Driver={SQL Server};Server=192.168.10.111,18973;Database=tips;Uid=sa;Pwd=0888TipS!@;";
+
+async function connectDB() {
+  // 요청마다 새로운 connection 생성
+  const db = await odbc.connect(connectionString);
+  console.log("DB Connected");
+  return db;
+}
+
+async function closeDB(db) {
+  if (db) {
+    await db.close();
+    console.log("DB Closed");
   }
-};
+}
 
-// 연결 풀 (중요)
-const poolPromise = new sql.ConnectionPool(config)
-  .connect()
-  .then(pool => {
-    console.log("DB Connected");
-    return pool;
-  })
-  .catch(err => console.log("DB Connection Failed", err));
-
-module.exports = {
-  sql,
-  poolPromise
-};
+module.exports = { connectDB, closeDB };
