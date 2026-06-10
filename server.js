@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const db = require("./db");
-
+const { poolPromise } = require("./db");
 const app = express();
 
 app.use(cors());
@@ -54,10 +53,9 @@ const MAX_CACHE_SIZE = 1000;
 // 서버 시작 시 테이블 캐시 초기화
 async function initializeTableCache() {
   try {
-    const conn = await db;
-    
+const pool = await poolPromise;    
     // SaD_ 테이블 목록 조회 (SQL Server 2000 대응 - sysobjects 사용)
-    const saDResult = await conn.query(`
+    const saDResult = await pool.request().query(`
       SELECT name
       FROM sysobjects
       WHERE xtype = 'U' AND name LIKE 'SaD_%'
@@ -114,9 +112,8 @@ app.get("/", (req, res) => {
 // 현재 접속 DB 확인
 app.get("/api/debug-db", async (req, res) => {
   try {
-    const conn = await db;
-
-    const result = await conn.query(`
+const pool = await poolPromise;
+    const result = await pool.request().query(`
       SELECT
         DB_NAME() AS DBName,
         @@SERVERNAME AS ServerName,
@@ -140,9 +137,8 @@ app.get("/api/price", async (req, res) => {
   }
 
   try {
-    const conn = await db;
-
-    const result = await conn.query(
+const pool = await poolPromise;
+    const result = await await pool.request().query(`
       `SELECT TOP 1 Barcode, goods_name, supply_price FROM Goods_Info WHERE Barcode = '${barcode}'`
     );
 
@@ -155,9 +151,8 @@ app.get("/api/price", async (req, res) => {
 // 샘플 상품 확인
 app.get("/api/sample", async (req, res) => {
   try {
-    const conn = await db;
-
-    const result = await conn.query(`
+const pool = await poolPromise;
+    const result = await pool.request().query(`
       SELECT TOP 1 *
       FROM Goods_Info
       WHERE Barcode='000000020008'
@@ -172,10 +167,9 @@ app.get("/api/sample", async (req, res) => {
 // 상품 관련 테이블 자동 탐색
 app.get("/api/analyze-tables", async (req, res) => {
   try {
-    const conn = await db;
-
+const pool = await poolPromise;
     // 1. 모든 테이블 조회
-    const tables = await conn.query(`
+    const tables = await pool.request().query(`
       SELECT TABLE_NAME
       FROM INFORMATION_SCHEMA.TABLES
       WHERE TABLE_TYPE = 'BASE TABLE'
@@ -187,11 +181,11 @@ app.get("/api/analyze-tables", async (req, res) => {
     // 2. 각 테이블의 행 수와 컬럼 목록 확인
     for (const table of tables) {
       try {
-        const countResult = await conn.query(`SELECT COUNT(*) as count FROM [${table.TABLE_NAME}]`);
+        const countResult = await pool.request().query(`SELECT COUNT(*) as count FROM [${table.TABLE_NAME}]`);
         const rowCount = countResult[0].count;
 
         if (rowCount > 0) {
-          const columnsResult = await conn.query(`
+          const columnsResult = await await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '${table.TABLE_NAME}'
@@ -245,7 +239,7 @@ app.get("/api/analyze-tables", async (req, res) => {
     const results = [];
     for (const table of top20) {
       try {
-        const sampleResult = await conn.query(`SELECT TOP 3 * FROM [${table.tableName}]`);
+        const sampleResult = await await pool.request().query(`SELECT TOP 3 * FROM [${table.tableName}]`);
         results.push({
           ...table,
           sampleData: sampleResult,
@@ -297,10 +291,9 @@ app.get("/api/product", async (req, res) => {
 
     // DB 전역 큐를 통한 DB 조회 (동시 접근 제한)
     const response = await queueDbOperation(async () => {
-      const conn = await db;
-
+const pool = await poolPromise;
       // Goods 테이블에서 기본 정보 조회 (3파트 명명)
-      const goodsResult = await conn.query(
+      const goodsResult = await await pool.request().query('
         `SELECT TOP 1 Barcode, G_Name, Sell_Pri FROM tips..Goods WHERE Barcode = '${trimmedBarcode}'`
       );
 
@@ -324,7 +317,7 @@ app.get("/api/product", async (req, res) => {
           console.log(`테이블 조회: ${tableName}, Barcode: ${trimmedBarcode}`);
         }
 
-        const saDResult = await conn.query(`
+        const saDResult = await pool.request().query(`
           SELECT TOP 1 Sell_Pri
           FROM ${tableName}
           WHERE Barcode = '${trimmedBarcode}'
@@ -402,8 +395,10 @@ app.get("/api/product", async (req, res) => {
 });
 
 // 서버 시작
-app.listen(3001, async () => {
-  console.log("서버 실행됨: http://localhost:3001");
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, async () => {
+  console.log(`서버 실행됨: ${PORT}`);
   
   // 테이블 캐시 초기화
   await initializeTableCache();
