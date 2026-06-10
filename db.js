@@ -1,9 +1,27 @@
-const odbc = require("odbc");
+const sql = require("mssql");
 
-const connectionString =
-  "Driver={SQL Server};Server=192.168.10.111,18973;Database=tips;Uid=sa;Pwd=0888TipS!@;";
+const config = {
+  user: "sa",
+  password: "0888TipS!@",
+  server: "192.168.10.111",
+  port: 18973,
+  database: "tips",
+  options: {
+    encrypt: false,
+    trustServerCertificate: true
+  }
+};
 
-// 단일 연결 사용 (ODBC 동시 쿼리 충돌 방지)
-const db = odbc.connect(connectionString);
+// 연결 풀 (중요)
+const poolPromise = new sql.ConnectionPool(config)
+  .connect()
+  .then(pool => {
+    console.log("DB Connected");
+    return pool;
+  })
+  .catch(err => console.log("DB Connection Failed", err));
 
-module.exports = db;
+module.exports = {
+  sql,
+  poolPromise
+};
